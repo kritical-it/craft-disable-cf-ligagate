@@ -27,11 +27,14 @@ class BlockedAnyStatusResolver implements StatusResolverInterface
             return $shouldDisable;
         }
 
-        $resolvedIps = $this->resolveConfiguredHostIps($settings);
+        $witnessHostname = $settings->getWitnessHostname();
+        $witnessIps = $witnessHostname !== null ? $this->resolveHostIps([$witnessHostname]) : [];
+        $protectedIps = $this->resolveHostIps($settings->getDnsRecordHostnames());
+        $resolvedIps = array_values(array_unique(array_merge($witnessIps, $protectedIps)));
         $matchedIps = array_values(array_intersect($blockedIps, $resolvedIps));
         $shouldDisable = $matchedIps !== [];
 
-        $this->lastDiagnostics = $this->diagnostics($settings, $blockedIps, $resolvedIps, $matchedIps, $shouldDisable);
+        $this->lastDiagnostics = $this->diagnostics($settings, $blockedIps, $resolvedIps, $matchedIps, $shouldDisable, $witnessHostname, $witnessIps, $protectedIps);
 
         return $shouldDisable;
     }
@@ -68,11 +71,11 @@ class BlockedAnyStatusResolver implements StatusResolverInterface
     /**
      * @return string[]
      */
-    private function resolveConfiguredHostIps(Settings $settings): array
+    private function resolveHostIps(array $hostnames): array
     {
         $ips = [];
 
-        foreach ($settings->getDnsRecordHostnames() as $hostname) {
+        foreach ($hostnames as $hostname) {
             $records = dns_get_record($hostname, DNS_A + DNS_AAAA);
 
             foreach ($records ?: [] as $record) {
@@ -90,17 +93,24 @@ class BlockedAnyStatusResolver implements StatusResolverInterface
      * @param string[] $blockedIps
      * @param string[] $resolvedIps
      * @param string[] $matchedIps
-     * @return array{strategy:string,threshold:int|null,blockedIps:array<int,string>,resolvedIps:array<int,string>,matchedIps:array<int,string>,blockedIpCount:int,resolvedIpCount:int,matchedIpCount:int,shouldDisable:bool}
+     * @param string[] $witnessIps
+     * @param string[] $protectedIps
+     * @return array{strategy:string,threshold:int|null,witnessHostname:string|null,witnessIps:array<int,string>,protectedIps:array<int,string>,blockedIps:array<int,string>,resolvedIps:array<int,string>,matchedIps:array<int,string>,blockedIpCount:int,witnessIpCount:int,protectedIpCount:int,resolvedIpCount:int,matchedIpCount:int,shouldDisable:bool}
      */
-    private function diagnostics(Settings $settings, array $blockedIps, array $resolvedIps, array $matchedIps, bool $shouldDisable): array
+    private function diagnostics(Settings $settings, array $blockedIps, array $resolvedIps, array $matchedIps, bool $shouldDisable, ?string $witnessHostname = null, array $witnessIps = [], array $protectedIps = []): array
     {
         return [
             'strategy' => $settings->disableStrategy,
             'threshold' => $settings->disableStrategy === Settings::STRATEGY_ANY_IP ? $settings->anyIpThreshold : null,
+            'witnessHostname' => $witnessHostname,
+            'witnessIps' => $witnessIps,
+            'protectedIps' => $protectedIps,
             'blockedIps' => $blockedIps,
             'resolvedIps' => $resolvedIps,
             'matchedIps' => $matchedIps,
             'blockedIpCount' => count($blockedIps),
+            'witnessIpCount' => count($witnessIps),
+            'protectedIpCount' => count($protectedIps),
             'resolvedIpCount' => count($resolvedIps),
             'matchedIpCount' => count($matchedIps),
             'shouldDisable' => $shouldDisable,

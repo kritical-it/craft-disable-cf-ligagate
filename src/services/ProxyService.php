@@ -47,7 +47,9 @@ class ProxyService extends Component
      */
     public function enable(): array
     {
-        return $this->restorePluginDisabledRecords(Plugin::getInstance()->getSettings());
+        $settings = Plugin::getInstance()->getSettings();
+
+        return $this->enableConfiguredRecords($settings, new CloudflareClient($settings), $this->summary(false, false), false);
     }
 
     private function resolver(Settings $settings): StatusResolverInterface
@@ -287,7 +289,7 @@ class ProxyService extends Component
             ->where(['recordId' => $record['id']])
             ->one();
 
-        if ($state !== false) {
+        if (is_array($state)) {
             return $state;
         }
 

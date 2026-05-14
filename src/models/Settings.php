@@ -19,6 +19,7 @@ class Settings extends Model
     public string $zoneId = '';
     public string $apiToken = '';
     public string $dnsRecordHostnames = '';
+    public string $witnessHostname = '';
     public string $statusUrl = 'https://hayahora.futbol/estado/blocked-any.txt';
     public string $disableStrategy = self::STRATEGY_EXACT_IP;
     public string $resolverClass = '';
@@ -38,6 +39,14 @@ class Settings extends Model
         $hostnames = array_map(static fn(string $hostname): string => strtolower(trim($hostname)), $hostnames);
 
         return array_values(array_unique(array_filter($hostnames)));
+    }
+
+    public function getWitnessHostname(): ?string
+    {
+        $value = App::parseEnv($this->witnessHostname);
+        $value = is_string($value) ? trim($value) : trim($this->witnessHostname);
+
+        return $value !== '' ? strtolower($value) : null;
     }
 
     /**
@@ -75,7 +84,7 @@ class Settings extends Model
     public function rules(): array
     {
         return [
-            [['zoneId', 'apiToken', 'dnsRecordHostnames', 'statusUrl', 'disableStrategy', 'resolverClass'], 'string'],
+            [['zoneId', 'apiToken', 'dnsRecordHostnames', 'witnessHostname', 'statusUrl', 'disableStrategy', 'resolverClass'], 'string'],
             [['disableStrategy'], 'in', 'range' => array_keys($this->getDisableStrategyOptions())],
             [['respectManualChanges'], 'safe'],
             [['anyIpThreshold'], 'integer', 'min' => 1],

@@ -72,6 +72,24 @@ Multiple hostnames can be separated by commas, spaces, or new lines. Environment
 
 The plugin looks up matching proxied DNS records in the configured Cloudflare zone and persists their Cloudflare record IDs after discovery.
 
+Only `A` and `AAAA` records are managed. Other records with the same hostname, such as `TXT`, `MX`, or `CNAME`, are ignored.
+
+### Cloudflare Witness Hostname
+
+Optional but recommended when using `Disable if match exact IP`.
+
+This should be a separate DNS record that remains Cloudflare-proxied and is never modified by the plugin. The resolver uses it as a witness to keep resolving Cloudflare edge IPs even after the protected hostnames have been switched to DNS-only.
+
+Example Cloudflare DNS record:
+
+```text
+cf-witness.example.com A 192.0.2.1 proxied=true
+```
+
+`192.0.2.1` belongs to a documentation/test range and is a good inert origin candidate for a witness record. If Cloudflare does not accept that IP for a proxied record, point the witness hostname at a harmless origin or at your normal origin and make sure the hostname is not linked publicly.
+
+Environment variables are supported.
+
 ### Disable Strategy
 
 Available values:
@@ -79,7 +97,9 @@ Available values:
 - `Disable if match exact IP`
 - `Disable if any IP`
 
-`Disable if match exact IP` resolves the configured hostnames from the server running Craft using DNS lookups for `A` and `AAAA` records, then disables Cloudflare only if one of those resolved IPs appears in the blocked-IP list. If the hostname is proxied by Cloudflare, these resolved IPs will normally be Cloudflare edge IPs, which is the intended comparison.
+`Disable if match exact IP` resolves the witness hostname and the configured protected hostnames from the server running Craft using DNS lookups for `A` and `AAAA` records. It disables Cloudflare if any IP from either source appears in the blocked-IP list. If no witness hostname is configured, it only resolves the protected hostnames.
+
+Using a witness hostname avoids flapping: when the plugin disables the protected records, those records become DNS-only and start resolving to the origin IP, but the witness hostname continues resolving to Cloudflare edge IPs. Resolving both witness and protected hostnames also covers cases where Cloudflare returns different edge IPs for different records.
 
 `Disable if any IP` disables Cloudflare when the blocked-IP list contains at least the configured threshold number of valid IPs.
 
@@ -184,7 +204,10 @@ Dry run output includes resolver diagnostics:
 
 - resolver strategy
 - blocked IPs found in the status URL
-- server-resolved IPs for the configured hostnames, when using `Disable if match exact IP`
+- witness hostname, when configured
+- server-resolved witness IPs, when configured
+- server-resolved protected hostname IPs, when using `Disable if match exact IP`
+- combined resolved IPs used for matching
 - matched IPs, when using `Disable if match exact IP`
 - current Cloudflare `proxied` state for each checked DNS record
 - target `proxied` state and whether each record would change
@@ -215,7 +238,7 @@ ddev craft disable-cf-ligagate/proxy/disable
 
 ### Force Enable Proxy
 
-Useful for testing. Restores only records that were disabled by the plugin and whose original state was proxied.
+Useful for testing. Forces `proxied=true` for all configured Cloudflare DNS records, regardless of whether they were disabled by the plugin or manually.
 
 ```bash
 ddev craft disable-cf-ligagate/proxy/enable

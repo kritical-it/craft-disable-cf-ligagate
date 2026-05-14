@@ -11,6 +11,8 @@ use RuntimeException;
 
 class CloudflareClient
 {
+    private const PROXIABLE_RECORD_TYPES = ['A', 'AAAA'];
+
     public function __construct(private readonly Settings $settings)
     {
     }
@@ -29,7 +31,11 @@ class CloudflareClient
 
         $matches = [];
         foreach ($records as $record) {
-            if (($record['name'] ?? null) === $hostname && array_key_exists('proxied', $record)) {
+            if (
+                ($record['name'] ?? null) === $hostname &&
+                in_array($record['type'] ?? null, self::PROXIABLE_RECORD_TYPES, true) &&
+                array_key_exists('proxied', $record)
+            ) {
                 $matches[] = $this->normalizeRecord($record);
             }
         }
@@ -119,6 +125,10 @@ class CloudflareClient
     {
         if (!is_array($record) || !isset($record['id'], $record['type'], $record['name']) || !array_key_exists('proxied', $record)) {
             throw new RuntimeException('Cloudflare returned an invalid DNS record payload.');
+        }
+
+        if (!in_array($record['type'], self::PROXIABLE_RECORD_TYPES, true)) {
+            throw new RuntimeException(sprintf('Cloudflare DNS record type "%s" is not supported by this plugin.', (string)$record['type']));
         }
 
         return [

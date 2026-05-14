@@ -102,8 +102,22 @@ class ProxyController extends Controller
             ));
 
             if (($diagnostics['strategy'] ?? null) === 'exactIp') {
+                if (($diagnostics['witnessHostname'] ?? null) !== null) {
+                    $this->stdout(sprintf("Witness hostname: %s\n", $diagnostics['witnessHostname']));
+                    $this->stdout(sprintf(
+                        "Witness IPs (%d): %s\n",
+                        $diagnostics['witnessIpCount'] ?? 0,
+                        $this->formatList($diagnostics['witnessIps'] ?? [])
+                    ));
+                }
+
                 $this->stdout(sprintf(
-                    "Server-resolved IPs (%d): %s\n",
+                    "Protected hostname IPs (%d): %s\n",
+                    $diagnostics['protectedIpCount'] ?? 0,
+                    $this->formatList($diagnostics['protectedIps'] ?? [])
+                ));
+                $this->stdout(sprintf(
+                    "All resolved IPs (%d): %s\n",
                     $diagnostics['resolvedIpCount'] ?? 0,
                     $this->formatList($diagnostics['resolvedIps'] ?? [])
                 ));

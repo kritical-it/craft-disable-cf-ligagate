@@ -31,6 +31,15 @@
     suggestEnvVars: true,
 }) }}
 
+{{ forms.autosuggestField({
+    label: 'Cloudflare Witness Hostname'|t('disable-cf-ligagate'),
+    instructions: 'Optional but recommended for "Disable if match exact IP". Configure a separate Cloudflare-proxied A record that this plugin never changes, such as cf-witness.example.com pointing to 192.0.2.1. The resolver uses this hostname to keep seeing Cloudflare edge IPs while the protected records are DNS-only.'|t('disable-cf-ligagate'),
+    id: 'witnessHostname',
+    name: 'witnessHostname',
+    value: settings.witnessHostname,
+    suggestEnvVars: true,
+}) }}
+
 {{ forms.selectField({
     label: 'Disable Strategy'|t('disable-cf-ligagate'),
     id: 'disableStrategy',
