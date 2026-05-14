@@ -25,7 +25,7 @@
   },
   "extra": {
     "handle": "disable-cf-ligagate",
-    "name": "Disable CF Ligagate",
+    "name": "Disable Cloudflare Ligagate",
     "developer": "Kritical IT",
     "documentationUrl": "https://github.com/kritical-it/craft-disable-cf-ligagate"
   },
