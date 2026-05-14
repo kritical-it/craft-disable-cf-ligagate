@@ -67,6 +67,15 @@
     suggestEnvVars: true,
 }) }}
 
+{{ forms.booleanMenuField({
+    label: 'Respect Manual Changes'|t('disable-cf-ligagate'),
+    instructions: 'When enabled, the plugin only restores records it disabled itself. When disabled, checks enforce the desired proxy state even if the record was changed manually.'|t('disable-cf-ligagate'),
+    id: 'respectManualChanges',
+    name: 'respectManualChanges',
+    value: settings.respectManualChanges,
+    includeEnvVars: true,
+}) }}
+
 {{ forms.textField({
     label: 'Request Timeout'|t('disable-cf-ligagate'),
     id: 'requestTimeout',

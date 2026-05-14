@@ -117,6 +117,27 @@ KriticalIT\Ligagate\contracts\StatusResolverInterface
 
 The environment variable `DISABLE_CF_LIGAGATE_RESOLVER_CLASS` takes precedence over the setting field.
 
+### Respect Manual Changes
+
+Controls whether the plugin should preserve manual Cloudflare proxy changes.
+
+Default:
+
+```text
+true
+```
+
+During a detected block, the plugin always checks all configured DNS records and ensures they are unproxied. This setting only changes what happens when the block is no longer detected.
+
+When enabled, the plugin only restores DNS records that it disabled itself and that were originally proxied.
+
+When disabled, each check enforces the desired state:
+
+- blocked: configured records should be unproxied
+- not blocked: configured records should be proxied
+
+This setting supports boolean environment variables through the control panel field. Accepted values include `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`.
+
 ### Request Timeout
 
 Timeout in seconds for HTTP calls to the status URL and Cloudflare API.
@@ -251,5 +272,7 @@ Restoration is conservative:
 - If the plugin disabled a record that was originally proxied, it can re-enable it when the block ends.
 - If a record was already unproxied manually, the plugin will not turn it back on.
 - If someone manually re-enables a record while the plugin thinks it disabled it, the next restore pass clears the plugin-disabled state.
+
+This conservative behavior applies when `Respect Manual Changes` is enabled. During a detected block, all configured records are still checked and unproxied if needed. If `Respect Manual Changes` is disabled, the plugin also enforces the desired proxied state when no block is detected.
 
 If the status URL or Cloudflare API fails, the plugin logs the error and does not intentionally change Cloudflare state for that failing check.

@@ -141,9 +141,12 @@ class ProxyService extends Component
     {
         $client = new CloudflareClient($settings);
         $summary = $this->summary(false, $dryRun);
-        $states = $this->pluginDisabledStatesForConfiguredHosts($settings);
 
-        foreach ($states as $state) {
+        if (!$settings->getRespectManualChanges()) {
+            return $this->enableConfiguredRecords($settings, $client, $summary, $dryRun);
+        }
+
+        foreach ($this->pluginDisabledStatesForConfiguredHosts($settings) as $state) {
             try {
                 if (empty($state['recordId'])) {
                     continue;
@@ -204,6 +207,67 @@ class ProxyService extends Component
                 $summary['errors'][] = sprintf('%s: %s', $state['hostname'], $e->getMessage());
                 if (!$dryRun) {
                     $this->saveState($state, ['lastError' => $e->getMessage()]);
+                }
+                Craft::error($e->getMessage(), __METHOD__);
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>} $summary
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
+     */
+    private function enableConfiguredRecords(Settings $settings, CloudflareClient $client, array $summary, bool $dryRun): array
+    {
+        foreach ($settings->getDnsRecordHostnames() as $hostname) {
+            try {
+                foreach ($client->findDnsRecords($hostname) as $record) {
+                    $summary['checked']++;
+                    $state = $this->stateForRecord($hostname, $record, !$dryRun);
+                    $wouldChange = $record['proxied'] === false;
+                    $summary['records'][] = $this->recordSummary($record, $wouldChange, true);
+
+                    if (!$dryRun && $state === null) {
+                        throw new RuntimeException(sprintf('Could not create local state for Cloudflare DNS record "%s".', $record['id']));
+                    }
+
+                    if (!$dryRun && $state !== null) {
+                        $this->touchState($state, $record, null);
+                    }
+
+                    if (!$wouldChange) {
+                        if (!$dryRun && $state !== null) {
+                            $this->saveState($state, [
+                                'originalProxied' => null,
+                                'disabledByPlugin' => false,
+                                'lastError' => null,
+                            ]);
+                        }
+                        continue;
+                    }
+
+                    if ($dryRun) {
+                        $summary['changed']++;
+                        continue;
+                    }
+
+                    $updated = $client->setDnsRecordProxied($record['id'], true);
+                    $this->saveState($state, [
+                        'recordType' => $updated['type'],
+                        'lastKnownProxied' => true,
+                        'originalProxied' => null,
+                        'disabledByPlugin' => false,
+                        'lastChangedAt' => Db::prepareDateForDb(new DateTime),
+                        'lastError' => null,
+                    ]);
+                    $summary['changed']++;
+                }
+            } catch (\Throwable $e) {
+                $summary['errors'][] = sprintf('%s: %s', $hostname, $e->getMessage());
+                if (!$dryRun) {
+                    $this->markHostnameError($hostname, $e->getMessage());
                 }
                 Craft::error($e->getMessage(), __METHOD__);
             }

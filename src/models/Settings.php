@@ -24,6 +24,7 @@ class Settings extends Model
     public string $resolverClass = '';
     public int $anyIpThreshold = 10;
     public int $requestTimeout = 10;
+    public bool|string $respectManualChanges = true;
 
     /**
      * @return string[]
@@ -66,11 +67,17 @@ class Settings extends Model
         return BlockedAnyStatusResolver::class;
     }
 
+    public function getRespectManualChanges(): bool
+    {
+        return App::parseBooleanEnv($this->respectManualChanges) ?? (bool)$this->respectManualChanges;
+    }
+
     public function rules(): array
     {
         return [
             [['zoneId', 'apiToken', 'dnsRecordHostnames', 'statusUrl', 'disableStrategy', 'resolverClass'], 'string'],
             [['disableStrategy'], 'in', 'range' => array_keys($this->getDisableStrategyOptions())],
+            [['respectManualChanges'], 'safe'],
             [['anyIpThreshold'], 'integer', 'min' => 1],
             [['requestTimeout'], 'integer', 'min' => 1, 'max' => 60],
         ];
