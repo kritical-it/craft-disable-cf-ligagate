@@ -1,0 +1,47 @@
+{
+  "name": "kritical-it/craft-disable-cf-ligagate",
+  "description": "Automatically check blocked ips by Spanish ISPs and disable/enalbes CF orange cloud.",
+  "type": "craft-plugin",
+  "license": "mit",
+  "support": {
+    "email": "info@gongarce.io",
+    "issues": "https://github.com/kritical-it/craft-disable-cf-ligagate/issues?state=open",
+    "source": "https://github.com/kritical-it/craft-disable-cf-ligagate",
+    "docs": "https://github.com/kritical-it/craft-disable-cf-ligagate",
+    "rss": "https://github.com/kritical-it/craft-disable-cf-ligagate/releases.atom"
+  },
+  "require": {
+    "php": ">=8.2",
+    "craftcms/cms": "^5.9.0"
+  },
+  "require-dev": {
+    "craftcms/ecs": "dev-main",
+    "craftcms/phpstan": "dev-main"
+  },
+  "autoload": {
+    "psr-4": {
+      "KriticalIT\\Ligagate\\": "src/"
+    }
+  },
+  "extra": {
+    "handle": "disable-cf-ligagate",
+    "name": "Disable CF Ligagate",
+    "developer": "Kritical IT",
+    "documentationUrl": "https://github.com/kritical-it/craft-disable-cf-ligagate"
+  },
+  "scripts": {
+    "check-cs": "ecs check --ansi",
+    "fix-cs": "ecs check --ansi --fix",
+    "phpstan": "phpstan --memory-limit=1G"
+  },
+  "config": {
+    "sort-packages": true,
+    "platform": {
+      "php": "8.2"
+    },
+    "allow-plugins": {
+      "yiisoft/yii2-composer": true,
+      "craftcms/plugin-installer": true
+    }
+  }
+}

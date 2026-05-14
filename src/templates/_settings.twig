@@ -1,0 +1,78 @@
+{# @var plugin \KriticalIT\Ligagate\Plugin #}
+{# @var settings \KriticalIT\Ligagate\models\Settings #}
+
+{% import '_includes/forms.twig' as forms %}
+
+{{ forms.autosuggestField({
+    first: true,
+    label: 'Cloudflare Zone ID'|t('disable-cf-ligagate'),
+    instructions: 'Cloudflare zone ID. Environment variables are supported.'|t('disable-cf-ligagate'),
+    id: 'zoneId',
+    name: 'zoneId',
+    value: settings.zoneId,
+    suggestEnvVars: true,
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Cloudflare API Token'|t('disable-cf-ligagate'),
+    instructions: 'API token with permission to read and edit DNS records in the zone.'|t('disable-cf-ligagate'),
+    id: 'apiToken',
+    name: 'apiToken',
+    value: settings.apiToken,
+    suggestEnvVars: true,
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'DNS Record Hostnames'|t('disable-cf-ligagate'),
+    instructions: 'Hostnames to protect, separated by commas, spaces, or new lines. The plugin will find their Cloudflare DNS records.'|t('disable-cf-ligagate'),
+    id: 'dnsRecordHostnames',
+    name: 'dnsRecordHostnames',
+    value: settings.dnsRecordHostnames,
+    suggestEnvVars: true,
+}) }}
+
+{{ forms.selectField({
+    label: 'Disable Strategy'|t('disable-cf-ligagate'),
+    id: 'disableStrategy',
+    name: 'disableStrategy',
+    options: settings.getDisableStrategyOptions(),
+    value: settings.disableStrategy,
+}) }}
+
+{{ forms.textField({
+    label: 'Any IP Threshold'|t('disable-cf-ligagate'),
+    instructions: 'When using "Disable if any IP", disable the proxy only if the status URL returns at least this many blocked IPs.'|t('disable-cf-ligagate'),
+    id: 'anyIpThreshold',
+    name: 'anyIpThreshold',
+    value: settings.anyIpThreshold,
+    type: 'number',
+    min: 1,
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Blocked IP Status URL'|t('disable-cf-ligagate'),
+    instructions: 'Plain text URL where each line is one blocked IP.'|t('disable-cf-ligagate'),
+    id: 'statusUrl',
+    name: 'statusUrl',
+    value: settings.statusUrl,
+    suggestEnvVars: true,
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Custom Resolver Class'|t('disable-cf-ligagate'),
+    instructions: 'Optional. DISABLE_CF_LIGAGATE_RESOLVER_CLASS takes precedence if set.'|t('disable-cf-ligagate'),
+    id: 'resolverClass',
+    name: 'resolverClass',
+    value: settings.resolverClass,
+    suggestEnvVars: true,
+}) }}
+
+{{ forms.textField({
+    label: 'Request Timeout'|t('disable-cf-ligagate'),
+    id: 'requestTimeout',
+    name: 'requestTimeout',
+    value: settings.requestTimeout,
+    type: 'number',
+    min: 1,
+    max: 60,
+}) }}
