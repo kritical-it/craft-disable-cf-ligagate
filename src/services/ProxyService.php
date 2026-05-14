@@ -20,18 +20,22 @@ use RuntimeException;
 class ProxyService extends Component
 {
     /**
-     * @return array{shouldDisable:bool,checked:int,changed:int,errors:array<int,string>}
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
      */
-    public function check(): array
+    public function check(bool $dryRun = false): array
     {
         $settings = Plugin::getInstance()->getSettings();
-        $shouldDisable = $this->resolver($settings)->shouldDisableProxy($settings);
+        $resolver = $this->resolver($settings);
+        $shouldDisable = $resolver->shouldDisableProxy($settings);
+        $diagnostics = method_exists($resolver, 'getLastDiagnostics') ? $resolver->getLastDiagnostics() : [];
+        $summary = $shouldDisable ? $this->disableConfiguredRecords($settings, $dryRun) : $this->restorePluginDisabledRecords($settings, $dryRun);
+        $summary['diagnostics'] = $diagnostics;
 
-        return $shouldDisable ? $this->disableConfiguredRecords($settings) : $this->restorePluginDisabledRecords($settings);
+        return $summary;
     }
 
     /**
-     * @return array{shouldDisable:bool,checked:int,changed:int,errors:array<int,string>}
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
      */
     public function disable(): array
     {
@@ -39,7 +43,7 @@ class ProxyService extends Component
     }
 
     /**
-     * @return array{shouldDisable:bool,checked:int,changed:int,errors:array<int,string>}
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
      */
     public function enable(): array
     {
@@ -58,21 +62,34 @@ class ProxyService extends Component
     }
 
     /**
-     * @return array{shouldDisable:bool,checked:int,changed:int,errors:array<int,string>}
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
      */
-    private function disableConfiguredRecords(Settings $settings): array
+    private function disableConfiguredRecords(Settings $settings, bool $dryRun = false): array
     {
         $client = new CloudflareClient($settings);
-        $summary = $this->summary(true);
+        $summary = $this->summary(true, $dryRun);
 
         foreach ($settings->getDnsRecordHostnames() as $hostname) {
             try {
                 foreach ($client->findDnsRecords($hostname) as $record) {
                     $summary['checked']++;
-                    $state = $this->stateForRecord($hostname, $record);
-                    $this->touchState($state, $record, null);
+                    $state = $this->stateForRecord($hostname, $record, !$dryRun);
+                    $wouldChange = $record['proxied'] === true;
+                    $summary['records'][] = $this->recordSummary($record, $wouldChange, false);
+
+                    if (!$dryRun && $state === null) {
+                        throw new RuntimeException(sprintf('Could not create local state for Cloudflare DNS record "%s".', $record['id']));
+                    }
+
+                    if (!$dryRun && $state !== null) {
+                        $this->touchState($state, $record, null);
+                    }
 
                     if ($record['proxied'] === false) {
+                        if ($dryRun) {
+                            continue;
+                        }
+
                         if ((bool)$state['disabledByPlugin'] === true) {
                             $this->saveState($state, [
                                 'lastKnownProxied' => false,
@@ -89,6 +106,11 @@ class ProxyService extends Component
                         continue;
                     }
 
+                    if ($dryRun) {
+                        $summary['changed']++;
+                        continue;
+                    }
+
                     $updated = $client->setDnsRecordProxied($record['id'], false);
                     $this->saveState($state, [
                         'recordType' => $updated['type'],
@@ -102,7 +124,9 @@ class ProxyService extends Component
                 }
             } catch (\Throwable $e) {
                 $summary['errors'][] = sprintf('%s: %s', $hostname, $e->getMessage());
-                $this->markHostnameError($hostname, $e->getMessage());
+                if (!$dryRun) {
+                    $this->markHostnameError($hostname, $e->getMessage());
+                }
                 Craft::error($e->getMessage(), __METHOD__);
             }
         }
@@ -111,12 +135,12 @@ class ProxyService extends Component
     }
 
     /**
-     * @return array{shouldDisable:bool,checked:int,changed:int,errors:array<int,string>}
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
      */
-    private function restorePluginDisabledRecords(Settings $settings): array
+    private function restorePluginDisabledRecords(Settings $settings, bool $dryRun = false): array
     {
         $client = new CloudflareClient($settings);
-        $summary = $this->summary(false);
+        $summary = $this->summary(false, $dryRun);
         $states = $this->pluginDisabledStatesForConfiguredHosts($settings);
 
         foreach ($states as $state) {
@@ -127,9 +151,18 @@ class ProxyService extends Component
 
                 $record = $client->getDnsRecord((string)$state['recordId']);
                 $summary['checked']++;
-                $this->touchState($state, $record, null);
+                $wouldChange = $record['proxied'] === false && ($state['originalProxied'] ?? null) === true;
+                $summary['records'][] = $this->recordSummary($record, $wouldChange, true);
+
+                if (!$dryRun) {
+                    $this->touchState($state, $record, null);
+                }
 
                 if ($record['proxied'] === true) {
+                    if ($dryRun) {
+                        continue;
+                    }
+
                     $this->saveState($state, [
                         'lastKnownProxied' => true,
                         'originalProxied' => null,
@@ -140,11 +173,20 @@ class ProxyService extends Component
                 }
 
                 if (($state['originalProxied'] ?? null) !== true) {
+                    if ($dryRun) {
+                        continue;
+                    }
+
                     $this->saveState($state, [
                         'lastKnownProxied' => false,
                         'disabledByPlugin' => false,
                         'lastError' => null,
                     ]);
+                    continue;
+                }
+
+                if ($dryRun) {
+                    $summary['changed']++;
                     continue;
                 }
 
@@ -160,7 +202,9 @@ class ProxyService extends Component
                 $summary['changed']++;
             } catch (\Throwable $e) {
                 $summary['errors'][] = sprintf('%s: %s', $state['hostname'], $e->getMessage());
-                $this->saveState($state, ['lastError' => $e->getMessage()]);
+                if (!$dryRun) {
+                    $this->saveState($state, ['lastError' => $e->getMessage()]);
+                }
                 Craft::error($e->getMessage(), __METHOD__);
             }
         }
@@ -170,9 +214,9 @@ class ProxyService extends Component
 
     /**
      * @param array{id:string,type:string,name:string,proxied:bool} $record
-     * @return array<string,mixed>
+     * @return array<string,mixed>|null
      */
-    private function stateForRecord(string $hostname, array $record): array
+    private function stateForRecord(string $hostname, array $record, bool $create = true): ?array
     {
         $state = (new Query)
             ->from(Table::DNS_RECORD_STATES)
@@ -181,6 +225,10 @@ class ProxyService extends Component
 
         if ($state !== false) {
             return $state;
+        }
+
+        if (!$create) {
+            return null;
         }
 
         $now = Db::prepareDateForDb(new DateTime);
@@ -261,15 +309,34 @@ class ProxyService extends Component
     }
 
     /**
-     * @return array{shouldDisable:bool,checked:int,changed:int,errors:array<int,string>}
+     * @param array{id:string,type:string,name:string,proxied:bool} $record
+     * @return array{id:string,type:string,name:string,proxied:bool,wouldChange:bool,targetProxied:bool}
      */
-    private function summary(bool $shouldDisable): array
+    private function recordSummary(array $record, bool $wouldChange, bool $targetProxied): array
+    {
+        return [
+            'id' => $record['id'],
+            'type' => $record['type'],
+            'name' => $record['name'],
+            'proxied' => $record['proxied'],
+            'wouldChange' => $wouldChange,
+            'targetProxied' => $targetProxied,
+        ];
+    }
+
+    /**
+     * @return array{shouldDisable:bool,dryRun:bool,checked:int,changed:int,errors:array<int,string>,diagnostics:array<string,mixed>,records:array<int,array<string,mixed>>}
+     */
+    private function summary(bool $shouldDisable, bool $dryRun): array
     {
         return [
             'shouldDisable' => $shouldDisable,
+            'dryRun' => $dryRun,
             'checked' => 0,
             'changed' => 0,
             'errors' => [],
+            'diagnostics' => [],
+            'records' => [],
         ];
     }
 }

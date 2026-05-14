@@ -11,17 +11,34 @@ use KriticalIT\Ligagate\models\Settings;
 
 class BlockedAnyStatusResolver implements StatusResolverInterface
 {
+    private array $lastDiagnostics = [];
+
     public function shouldDisableProxy(Settings $settings): bool
     {
+        $this->lastDiagnostics = [];
         $blockedIps = $this->fetchBlockedIps($settings);
+        $resolvedIps = [];
+        $matchedIps = [];
 
         if ($settings->disableStrategy === Settings::STRATEGY_ANY_IP) {
-            return count($blockedIps) >= $settings->anyIpThreshold;
+            $shouldDisable = count($blockedIps) >= $settings->anyIpThreshold;
+            $this->lastDiagnostics = $this->diagnostics($settings, $blockedIps, $resolvedIps, $matchedIps, $shouldDisable);
+
+            return $shouldDisable;
         }
 
         $resolvedIps = $this->resolveConfiguredHostIps($settings);
+        $matchedIps = array_values(array_intersect($blockedIps, $resolvedIps));
+        $shouldDisable = $matchedIps !== [];
 
-        return array_intersect($blockedIps, $resolvedIps) !== [];
+        $this->lastDiagnostics = $this->diagnostics($settings, $blockedIps, $resolvedIps, $matchedIps, $shouldDisable);
+
+        return $shouldDisable;
+    }
+
+    public function getLastDiagnostics(): array
+    {
+        return $this->lastDiagnostics;
     }
 
     /**
@@ -67,5 +84,26 @@ class BlockedAnyStatusResolver implements StatusResolverInterface
         }
 
         return array_values(array_unique($ips));
+    }
+
+    /**
+     * @param string[] $blockedIps
+     * @param string[] $resolvedIps
+     * @param string[] $matchedIps
+     * @return array{strategy:string,threshold:int|null,blockedIps:array<int,string>,resolvedIps:array<int,string>,matchedIps:array<int,string>,blockedIpCount:int,resolvedIpCount:int,matchedIpCount:int,shouldDisable:bool}
+     */
+    private function diagnostics(Settings $settings, array $blockedIps, array $resolvedIps, array $matchedIps, bool $shouldDisable): array
+    {
+        return [
+            'strategy' => $settings->disableStrategy,
+            'threshold' => $settings->disableStrategy === Settings::STRATEGY_ANY_IP ? $settings->anyIpThreshold : null,
+            'blockedIps' => $blockedIps,
+            'resolvedIps' => $resolvedIps,
+            'matchedIps' => $matchedIps,
+            'blockedIpCount' => count($blockedIps),
+            'resolvedIpCount' => count($resolvedIps),
+            'matchedIpCount' => count($matchedIps),
+            'shouldDisable' => $shouldDisable,
+        ];
     }
 }

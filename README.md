@@ -12,10 +12,17 @@ The plugin checks an external text endpoint with blocked IPs, decides whether th
 
 ## Installation
 
-In this project the plugin is loaded locally from `plugins/disable-cf-ligagate`.
+Install the plugin in a Craft project with Composer, then install it in Craft:
 
 ```bash
-ddev composer update kritical-it/craft-disable-cf-ligagate --with-all-dependencies
+composer require kritical-it/craft-disable-cf-ligagate
+php craft plugin/install disable-cf-ligagate
+```
+
+If your project runs through DDEV:
+
+```bash
+ddev composer require kritical-it/craft-disable-cf-ligagate
 ddev craft plugin/install disable-cf-ligagate
 ```
 
@@ -72,7 +79,7 @@ Available values:
 - `Disable if match exact IP`
 - `Disable if any IP`
 
-`Disable if match exact IP` resolves the configured hostnames from the server running Craft and disables Cloudflare only if one of those resolved IPs appears in the blocked-IP list.
+`Disable if match exact IP` resolves the configured hostnames from the server running Craft using DNS lookups for `A` and `AAAA` records, then disables Cloudflare only if one of those resolved IPs appears in the blocked-IP list. If the hostname is proxied by Cloudflare, these resolved IPs will normally be Cloudflare edge IPs, which is the intended comparison.
 
 `Disable if any IP` disables Cloudflare when the blocked-IP list contains at least the configured threshold number of valid IPs.
 
@@ -136,6 +143,31 @@ ddev craft disable-cf-ligagate/proxy/check
 
 This is the command intended for periodic execution.
 
+### Dry Run Check
+
+Runs the same check and prints the desired state and how many records would change, but does not update local state and does not change Cloudflare.
+
+```bash
+ddev craft disable-cf-ligagate/proxy/check --dry-run
+```
+
+Short alias:
+
+```bash
+ddev craft disable-cf-ligagate/proxy/check -d
+```
+
+`--dry-run` cannot be combined with `--queue` because the result is meant to be printed immediately.
+
+Dry run output includes resolver diagnostics:
+
+- resolver strategy
+- blocked IPs found in the status URL
+- server-resolved IPs for the configured hostnames, when using `Disable if match exact IP`
+- matched IPs, when using `Disable if match exact IP`
+- current Cloudflare `proxied` state for each checked DNS record
+- target `proxied` state and whether each record would change
+
 ### Enqueue A Check
 
 Pushes a check job into Craft Queue instead of executing it inline.
@@ -172,7 +204,7 @@ ddev craft disable-cf-ligagate/proxy/enable
 
 The plugin does not include an internal scheduler. Use cron, systemd timers, or your hosting scheduler.
 
-Recommended simple setup: run the check inline every minute or every few minutes.
+Recommended setup: run the check every 1 or 2 minutes. A 2-minute interval is a good default because the check is lightweight and still reacts quickly.
 
 Example cron using DDEV:
 
